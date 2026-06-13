@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nexus AI — Intelligent Conversations</title>
   <meta name="description" content="Nexus AI — A beautiful, intelligent AI chat interface powered by Puter AI. Have natural conversations with advanced AI models.">
+  <link rel="icon" type="image/png" href="logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -97,6 +98,14 @@
       display: flex;
       align-items: center;
       gap: 10px;
+    }
+    .sidebar-logo-img {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      object-fit: cover;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      border: 1.5px solid rgba(255, 255, 255, 0.15);
     }
     .sidebar-logo-icon {
       width: 32px;
@@ -217,6 +226,7 @@
     .model-selector:hover { border-color: rgba(255, 255, 255, 0.15); }
     .model-selector:focus { outline: none; border-color: var(--accent); }
     .model-selector option { background: var(--bg-sidebar); color: var(--text-sidebar); }
+    .model-selector optgroup { background: var(--bg-sidebar); color: var(--text-sidebar-dim); font-style: normal; font-weight: 600; }
     /* ===== MAIN CONTENT ===== */
     .main {
       flex: 1;
@@ -318,6 +328,16 @@
     @keyframes fadeInUp {
       from { opacity: 0; transform: translateY(20px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+    .welcome-logo {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 32px rgba(196, 120, 74, 0.2);
+      border: 2px solid var(--bg-tertiary);
+      animation: float 4s ease-in-out infinite;
     }
     .welcome-icon {
       width: 72px;
@@ -647,6 +667,11 @@
       .messages-inner { padding: 16px 16px 24px; }
       .input-area { padding: 0 16px 16px; }
       .header { padding: 0 12px; }
+      .welcome-logo {
+        width: 56px;
+        height: 56px;
+        border-width: 1.5px;
+      }
       .welcome-icon {
         width: 56px;
         height: 56px;
@@ -721,7 +746,7 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-logo">
-          <div class="sidebar-logo-icon">N</div>
+          <img src="logo.png" alt="Nexus AI Logo" class="sidebar-logo-img">
           <span class="sidebar-logo-text">Nexus AI</span>
         </div>
       </div>
@@ -735,6 +760,7 @@
       </nav>
       <footer class="sidebar-footer">
         <select class="model-selector" id="model-selector" aria-label="Select AI model">
+          <option value="claude-fable-5">Claude Fable 5</option>
           <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
           <option value="gpt-4o">GPT-4o</option>
           <option value="gpt-4o-mini">GPT-4o Mini</option>
@@ -902,7 +928,7 @@
     function renderWelcome() {
       dom.messagesInner.innerHTML = `
         <div class="welcome">
-          <div class="welcome-icon">✦</div>
+          <img src="logo.png" alt="Nexus AI Logo" class="welcome-logo">
           <h1>What can I help with?</h1>
           <p>I'm Nexus AI, your intelligent assistant. Ask me anything — from creative writing to code, analysis, and beyond.</p>
           <div class="suggestion-grid">
@@ -1188,10 +1214,99 @@
     });
     dom.messagesContainer.addEventListener('scroll', checkScrollButton);
     dom.scrollToBottom.addEventListener('click', scrollToEnd);
+    // ===== DYNAMIC MODEL LOADING =====
+    async function loadModelsDynamically() {
+      try {
+        const models = await puter.ai.listModels();
+        if (!models || models.length === 0) return;
+        // Group models by provider
+        const featuredIds = [
+          'claude-fable-5',
+          'claude-5-fable',
+          'claude-3-5-sonnet-latest',
+          'claude-3-5-sonnet',
+          'gpt-4o',
+          'gpt-4o-mini',
+          'gemini-2.5-flash',
+          'gemini-2.5-pro',
+          'deepseek/deepseek-chat-v3-0324',
+          'meta-llama/llama-4-maverick'
+        ];
+        // Store selected value before clearing
+        const currentValue = dom.modelSelector.value;
+        // Clean up models
+        const chatModels = models.filter(m => m.id);
+        const featuredModels = [];
+        const otherModelsByProvider = {};
+        chatModels.forEach(model => {
+          // Normalize provider name
+          let provider = model.provider || 'Other';
+          provider = provider.charAt(0).toUpperCase() + provider.slice(1);
+          // Check if it should be featured (either in hardcoded list, or contains keywords for hot new models)
+          const isFeatured = featuredIds.includes(model.id) || 
+                             model.id.toLowerCase().includes('fable') || 
+                             model.id.toLowerCase().includes('claude-5');
+          if (isFeatured) {
+            featuredModels.push(model);
+          }
+          if (!otherModelsByProvider[provider]) {
+            otherModelsByProvider[provider] = [];
+          }
+          otherModelsByProvider[provider].push(model);
+        });
+        // Rebuild selector HTML
+        let html = '';
+        // Add Featured Group
+        if (featuredModels.length > 0) {
+          html += `<optgroup label="⭐ Featured Models">`;
+          featuredModels.forEach(m => {
+            html += `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.id)}</option>`;
+          });
+          html += `</optgroup>`;
+        }
+        // Add Provider Groups
+        const sortedProviders = Object.keys(otherModelsByProvider).sort();
+        sortedProviders.forEach(prov => {
+          html += `<optgroup label="${escapeHtml(prov)}">`;
+          // Sort models by name
+          const sortedModels = otherModelsByProvider[prov].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+          sortedModels.forEach(m => {
+            html += `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.id)}</option>`;
+          });
+          html += `</optgroup>`;
+        });
+        dom.modelSelector.innerHTML = html;
+        // Restore selection if possible, otherwise default
+        const hasSavedModel = Array.from(dom.modelSelector.options).some(opt => opt.value === currentValue);
+        if (hasSavedModel) {
+          dom.modelSelector.value = currentValue;
+        } else {
+          // Try to select a powerful default if available
+          const defaultOptions = ['claude-fable-5', 'claude-5-fable', 'claude-3-5-sonnet-latest', 'gemini-2.5-flash'];
+          let selectedDefault = false;
+          for (const optVal of defaultOptions) {
+            const hasOpt = Array.from(dom.modelSelector.options).some(opt => opt.value === optVal);
+            if (hasOpt) {
+              dom.modelSelector.value = optVal;
+              selectedDefault = true;
+              break;
+            }
+          }
+          if (!selectedDefault && dom.modelSelector.options.length > 0) {
+            dom.modelSelector.selectedIndex = 0;
+          }
+        }
+        updateModelBadge();
+      } catch (err) {
+        console.error('Error fetching models from Puter.js:', err);
+      }
+    }
     // ===== INIT =====
     function init() {
       loadState();
       updateModelBadge();
+      // Load models dynamically in the background
+      loadModelsDynamically();
       const conv = getActiveConversation();
       if (conv && conv.messages.length > 0) {
         renderMessages(conv);
